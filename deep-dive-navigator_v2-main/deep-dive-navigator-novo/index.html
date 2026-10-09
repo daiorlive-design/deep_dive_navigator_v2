@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deep Dive Navigator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+    <!-- ============ PLAYER HUD (visible after sign-in) ============ -->
+    <header id="player-hud" class="player-hud hidden">
+        <div class="hud-brand">
+            <span class="hud-compass" aria-hidden="true">&#9678;</span>
+            <span class="hud-brand-text">Deep Dive Navigator</span>
+        </div>
+
+        <div class="hud-player">
+            <div class="hud-avatar" id="hud-avatar" aria-hidden="true"></div>
+            <div class="hud-identity">
+                <span class="hud-name" id="hud-name"></span>
+                <span class="hud-title" id="hud-title"></span>
+            </div>
+        </div>
+
+        <div class="hud-level">
+            <div class="hud-level-row">
+                <span class="hud-level-badge" id="hud-level">Lvl 1</span>
+                <span class="hud-xp-text" id="hud-xp-text">0 / 100 XP</span>
+            </div>
+            <div class="hud-xp-track" role="progressbar" aria-label="Experience to next level" aria-valuemin="0" aria-valuemax="100" id="hud-xp-bar">
+                <div class="hud-xp-fill" id="hud-xp-fill"></div>
+            </div>
+        </div>
+
+        <div class="hud-shards" id="hud-shards" title="Focus Shards — spend them in the shop">&#128142; 0</div>
+
+        <button id="btn-shop" class="hud-shop-btn" title="Explorer's Shop">
+            <svg class="hud-shop-icon" viewBox="0 0 32 32" aria-hidden="true">
+                <defs>
+                    <linearGradient id="coin-gold" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0" stop-color="#FFF1B0"/>
+                        <stop offset=".5" stop-color="#F2C24B"/>
+                        <stop offset="1" stop-color="#B9801E"/>
+                    </linearGradient>
+                </defs>
+                <g stroke="#7A4E0A" stroke-width="1.2">
+                    <!-- moeda de trás, em pé -->
+                    <circle cx="20" cy="11" r="8" fill="url(#coin-gold)"/>
+                    <circle cx="20" cy="11" r="5.2" fill="none" stroke-width=".9"/>
+                    <!-- pilha de duas moedas deitadas -->
+                    <ellipse cx="12" cy="25" rx="9" ry="3.6" fill="#C98F26"/>
+                    <path d="M3 25v-3.5h18V25" fill="#C98F26"/>
+                    <ellipse cx="12" cy="21.5" rx="9" ry="3.6" fill="url(#coin-gold)"/>
+                    <path d="M3 21.5v-3.5h18v3.5" fill="#C98F26"/>
+                    <ellipse cx="12" cy="18" rx="9" ry="3.6" fill="url(#coin-gold)"/>
+                </g>
+                <path d="M20 7.4L20.88 9.79L23.42 9.89L21.43 11.46L22.12 13.91L20 12.5L17.88 13.91L18.57 11.46L16.58 9.89L19.12 9.79Z" fill="#B9801E" stroke="#7A4E0A" stroke-width=".5" stroke-linejoin="round"/>
+            </svg>
+            <span class="hud-shop-text">Shop</span>
+        </button>
+
+        <button id="btn-friends" class="hud-icon-btn hud-friends-btn" title="Friends" aria-label="Friends">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="9" cy="8" r="3.4" fill="currentColor"/>
+                <path d="M2.5 19.5c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6" fill="currentColor"/>
+                <circle cx="16.5" cy="9" r="2.7" fill="currentColor" opacity=".65"/>
+                <path d="M15.2 14.1c3.4-.5 6.3 1.6 6.3 5.4h-4.3" fill="currentColor" opacity=".65"/>
+            </svg>
+            <span id="friends-badge" class="hud-badge hidden">0</span>
+        </button>
+
+        <div class="hud-sound">
+            <button id="btn-sound" class="hud-icon-btn" aria-expanded="false" aria-controls="sound-panel" title="Music &amp; sounds">&#127925;</button>
+            <div id="sound-panel" class="sound-panel hidden" role="dialog" aria-label="Music and sounds">
+                <div class="sound-row">
+                    <span class="sound-label">Background music</span>
+                    <button id="toggle-music" class="switch" role="switch" aria-checked="false" aria-label="Background music" data-sfx="toggle"><span class="switch-knob"></span></button>
+                </div>
+                <div id="track-list" class="track-list" role="radiogroup" aria-label="Music track"><!-- injected by script.js --></div>
+                <label class="sound-row volume-row">
+                    <span class="sound-label">Volume</span>
+                    <input type="range" id="music-volume" min="0" max="100" value="40">
+                </label>
+                <div class="sound-divider"></div>
+                <span class="sound-label">Reading voice <span class="sound-label-hint">(tap to preview)</span></span>
+                <div id="voice-list" class="track-list" role="radiogroup" aria-label="Reading voice"><!-- injected by script.js --></div>
+                <div class="sound-divider"></div>
+                <div class="sound-row">
+                    <span class="sound-label">Button sounds</span>
+                    <button id="toggle-sfx" class="switch" role="switch" aria-checked="true" aria-label="Button sounds" data-sfx="toggle"><span class="switch-knob"></span></button>
+                </div>
+            </div>
+        </div>
+
+        <button id="btn-account" class="hud-icon-btn" title="Account &amp; privacy" aria-label="Account and privacy">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path fill="currentColor" fill-rule="evenodd" d="M10.3 2.5h3.4l.5 2.4c.6.2 1.1.5 1.6.9l2.3-.8 1.7 3-1.8 1.6c.1.6.1 1.2 0 1.8l1.8 1.6-1.7 3-2.3-.8c-.5.4-1 .7-1.6.9l-.5 2.4h-3.4l-.5-2.4c-.6-.2-1.1-.5-1.6-.9l-2.3.8-1.7-3 1.8-1.6a6 6 0 0 1 0-1.8L4.2 8l1.7-3 2.3.8c.5-.4 1-.7 1.6-.9l.5-2.4ZM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/>
+            </svg>
+        </button>
+
+        <button id="btn-logout" class="hud-logout" title="Sign out">Sign out</button>
+    </header>
+
+    <!-- ============ AUTH SCREEN ============ -->
+    <section id="auth-screen" class="screen screen-active">
+        <div class="expedition-header">
+            <span class="compass-mark" aria-hidden="true">&#9678;</span>
+            <div>
+                <h1 class="brand-title">Deep Dive Navigator</h1>
+                <p class="brand-tagline">Turn a dense paper into a guided expedition.</p>
+            </div>
+        </div>
+
+        <div class="auth-card">
+            <p id="auth-loading" class="auth-loading">
+                <span class="spinner spinner-small" aria-hidden="true"></span> Loading your expedition&hellip;
+            </p>
+
+            <div id="auth-tabs" class="auth-tabs hidden" role="tablist">
+                <button type="button" id="tab-login" class="auth-tab auth-tab-active" role="tab" aria-selected="true">Sign in</button>
+                <button type="button" id="tab-register" class="auth-tab" role="tab" aria-selected="false">Create account</button>
+            </div>
+
+            <form id="login-form" class="auth-form hidden" novalidate>
+                <label class="field">
+                    <span class="field-label">Email</span>
+                    <input type="email" id="login-email" autocomplete="email" spellcheck="false">
+                </label>
+                <label class="field">
+                    <span class="field-label">Password</span>
+                    <input type="password" id="login-password" autocomplete="current-password">
+                </label>
+                <p id="login-msg" class="form-msg hidden" role="alert"></p>
+                <button type="button" id="btn-resend" class="link-btn hidden">Resend confirmation email</button>
+                <button type="submit" class="btn-primary" data-sfx="none">Begin expedition</button>
+                <button type="button" id="btn-forgot" class="link-btn">Forgot your password?</button>
+            </form>
+
+            <form id="register-form" class="auth-form hidden" novalidate>
+                <label class="field">
+                    <span class="field-label">Explorer name</span>
+                    <input type="text" id="reg-display" maxlength="24" autocomplete="nickname" placeholder="How should we call you?">
+                </label>
+                <div class="field-row">
+                    <label class="field">
+                        <span class="field-label">Username</span>
+                        <input type="text" id="reg-username" maxlength="20" autocomplete="username" spellcheck="false" placeholder="letters, numbers or _">
+                    </label>
+                    <label class="field">
+                        <span class="field-label">Email</span>
+                        <input type="email" id="reg-email" autocomplete="email" spellcheck="false">
+                    </label>
+                </div>
+                <div class="field-row">
+                    <label class="field">
+                        <span class="field-label">Password</span>
+                        <input type="password" id="reg-password" autocomplete="new-password" placeholder="8+ characters">
+                    </label>
+                    <label class="field">
+                        <span class="field-label">Confirm password</span>
+                        <input type="password" id="reg-confirm" autocomplete="new-password">
+                    </label>
+                </div>
+
+                <fieldset class="avatar-picker">
+                    <legend class="field-label">Choose your avatar</legend>
+                    <div id="avatar-options" class="avatar-options"><!-- injected by script.js --></div>
+                </fieldset>
+
+                <label class="consent-row">
+                    <input type="checkbox" id="reg-consent">
+                    <span>I have read the <button type="button" class="link-btn link-inline" data-open-privacy>Privacy notice</button>
+                        and agree that my data is used as described there.</span>
+                </label>
+
+                <p id="register-msg" class="form-msg hidden" role="alert"></p>
+                <button type="submit" class="btn-primary" data-sfx="none">Create account</button>
+            </form>
+
+            <form id="forgot-form" class="auth-form hidden" novalidate>
+                <h2 class="auth-subtitle">Reset your password</h2>
+                <p class="auth-help">Enter your account email and we'll send you a link to choose a new password.</p>
+                <label class="field">
+                    <span class="field-label">Email</span>
+                    <input type="email" id="forgot-email" autocomplete="email" spellcheck="false">
+                </label>
+                <p id="forgot-msg" class="form-msg hidden" role="alert"></p>
+                <button type="submit" class="btn-primary" data-sfx="none">Send reset link</button>
+                <button type="button" id="btn-back-login" class="link-btn">&#8592; Back to sign in</button>
+            </form>
+
+            <form id="newpass-form" class="auth-form hidden" novalidate>
+                <h2 class="auth-subtitle">Choose a new password</h2>
+                <div class="field-row">
+                    <label class="field">
+                        <span class="field-label">New password</span>
+                        <input type="password" id="newpass-password" autocomplete="new-password" placeholder="8+ characters">
+                    </label>
+                    <label class="field">
+                        <span class="field-label">Confirm password</span>
+                        <input type="password" id="newpass-confirm" autocomplete="new-password">
+                    </label>
+                </div>
+                <p id="newpass-msg" class="form-msg hidden" role="alert"></p>
+                <button type="submit" class="btn-primary" data-sfx="none">Save new password</button>
+            </form>
+
+            <p class="auth-note">Beta: your progress is saved to your account.
+                <button type="button" class="link-btn link-inline" data-open-privacy>Privacy notice</button></p>
+        </div>
+    </section>
+
+    <!-- ============ UPLOAD SCREEN ============ -->
+    <section id="upload-screen" class="screen">
+        <div class="expedition-header">
+            <span class="compass-mark" aria-hidden="true">&#9678;</span>
+            <div>
+                <h1 class="brand-title" id="welcome-title">Welcome, explorer</h1>
+                <p class="brand-tagline">Pick a paper and we'll turn it into a guided expedition.</p>
+            </div>
+        </div>
+
+        <div id="resume-banner" class="resume-banner hidden">
+            <div>
+                <p class="resume-title">You have an expedition in progress</p>
+                <p class="resume-sub" id="resume-details"></p>
+            </div>
+            <div class="resume-actions">
+                <button id="btn-resume" class="btn-primary btn-compact">Continue</button>
+                <button id="btn-discard" class="btn-ghost btn-compact">Start over</button>
+            </div>
+        </div>
+
+        <div class="upload-card">
+            <div class="upload-area" id="drop-zone">
+                <div class="upload-icon" aria-hidden="true">&#128196;</div>
+                <h3 class="upload-title">Attach your reading material</h3>
+                <p class="upload-hint">Choose a PDF and we'll map it into territories to explore.</p>
+
+                <input type="file" id="upload-pdf" accept="application/pdf" class="hidden-input">
+                <label for="upload-pdf" class="btn-outline">Browse files</label>
+
+                <p id="file-name-display" class="file-name hidden"></p>
+            </div>
+
+            <button id="btn-processar" class="btn-primary" disabled>Chart the course</button>
+
+            <div id="status-msg" class="hidden loading-status">
+                <div class="spinner" aria-hidden="true"></div>
+                <p class="loading-text">Reading the terrain&hellip; this can take a minute.</p>
+            </div>
+
+            <div id="error-msg" class="hidden error-banner"></div>
+
+            <p class="upload-privacy-note">
+                &#128737; Don't upload documents with personal or confidential information: the text of your PDF
+                is sent to an external AI service. Deep Dive Navigator can make mistakes.
+            </p>
+        </div>
+    </section>
+
+    <!-- ============ GAME SCREEN ============ -->
+    <section id="game-screen" class="screen">
+
+        <div class="quest-map" id="quest-map">
+            <div class="quest-map-top">
+                <span class="quest-map-label"><span class="quest-map-icon" aria-hidden="true">&#9678;</span> Quest Map</span>
+                <span class="quest-map-progress" id="expedition-progress">Expedition progress: 0%</span>
+            </div>
+            <div class="quest-trail-wrap" id="quest-trail-wrap">
+                <div class="quest-canvas" id="quest-trail"><!-- drawn by questmap.js --></div>
+            </div>
+            <div class="quest-progress-track">
+                <div class="quest-progress-fill" id="quest-progress-fill"></div>
+            </div>
+        </div>
+
+        <div class="toolbar" role="toolbar" aria-label="Reading tools">
+            <button id="btn-font-toggle" class="tool-btn" aria-pressed="false" title="Switch to a more legible font">Aa</button>
+            <button id="btn-tts" class="tool-btn" aria-pressed="false" title="Read aloud (continues through the section)">&#128266;</button>
+            <button id="btn-focus-mode" class="tool-btn tool-btn-active" aria-pressed="true" title="Toggle Focus Lantern">&#128294;</button>
+        </div>
+
+        <main class="reading-container">
+            <h2 id="phase-title" class="phase-title">Phase title</h2>
+            <p id="reading-hint" class="reading-hint hidden"></p>
+
+            <div id="hint-panel" class="hint-panel hidden">
+                <span class="hint-label">&#128161; Scout's Insight</span>
+                <ul id="hint-list"></ul>
+            </div>
+
+            <div id="dynamic-text-container"></div>
+        </main>
+
+        <div class="controls-area">
+            <button id="btn-hint" class="btn-ghost btn-compact">&#128269; Hint</button>
+            <button id="btn-prev" class="btn-secondary hidden">&#8592; Back</button>
+            <button id="btn-next" class="btn-secondary">Next &#8594;</button>
+            <button id="btn-quiz" class="btn-action hidden">Take the checkpoint quiz</button>
+        </div>
+    </section>
+
+    <!-- ============ QUIZ MODAL ============ -->
+    <div id="quiz-modal" class="modal-hidden">
+        <div class="modal-content">
+            <span class="modal-eyebrow">Checkpoint</span>
+            <h3 id="quiz-question">Question goes here</h3>
+
+            <div id="quiz-options" class="options-container"></div>
+
+            <div id="quiz-feedback" class="feedback-area hidden">
+                <p id="feedback-text">Feedback message</p>
+
+                <button id="btn-next-phase" class="btn-success hidden" data-sfx="none">Claim reward &amp; continue &#8594;</button>
+
+                <div id="fail-controls" class="hidden">
+                    <button id="btn-try-again" class="btn-secondary">Try again</button>
+                    <button id="btn-reread" class="btn-secondary">Reread this section</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ SHOP MODAL ============ -->
+    <div id="shop-modal" class="modal-hidden" role="dialog" aria-modal="true" aria-labelledby="shop-title">
+        <div class="shop-content">
+            <header class="shop-header">
+                <div>
+                    <span class="modal-eyebrow">Trading Post</span>
+                    <h3 id="shop-title" class="shop-title">The Explorer's Shop</h3>
+                </div>
+                <div class="shop-balance" id="shop-balance" title="Your Focus Shards">&#128142; 0</div>
+                <button id="btn-shop-close" class="shop-close" aria-label="Close shop">&#10005;</button>
+            </header>
+
+            <div class="shop-preview">
+                <div class="shop-preview-avatar" id="shop-preview-avatar" aria-hidden="true"></div>
+                <div class="shop-preview-text">
+                    <p class="shop-preview-name" id="shop-preview-name"></p>
+                    <p class="shop-preview-title" id="shop-preview-title"></p>
+                    <p class="shop-preview-level" id="shop-preview-level"></p>
+                </div>
+                <p class="shop-hint">Earn &#128142; by passing checkpoint quizzes. Rare items also require a minimum level.</p>
+            </div>
+
+            <div class="shop-tabs" role="tablist">
+                <button type="button" class="shop-tab shop-tab-active" data-tab="avatars" role="tab" aria-selected="true">Avatars</button>
+                <button type="button" class="shop-tab" data-tab="frames" role="tab" aria-selected="false">Frames</button>
+                <button type="button" class="shop-tab" data-tab="titles" role="tab" aria-selected="false">Titles</button>
+            </div>
+
+            <div class="shop-grid" id="shop-grid"><!-- injected by shop.js --></div>
+        </div>
+    </div>
+
+    <!-- ============ FRIENDS MODAL ============ -->
+    <div id="friends-modal" class="modal-hidden" role="dialog" aria-modal="true" aria-labelledby="friends-title">
+        <div class="shop-content friends-content">
+            <header class="shop-header">
+                <div>
+                    <span class="modal-eyebrow">Expedition Crew</span>
+                    <h3 id="friends-title" class="shop-title">Fellow Explorers</h3>
+                </div>
+                <button id="btn-friends-close" class="shop-close" aria-label="Close friends">&#10005;</button>
+            </header>
+
+            <form id="add-friend-form" class="add-friend" novalidate>
+                <label class="field-label" for="add-friend-input">Add a friend by username</label>
+                <div class="add-friend-row">
+                    <span class="add-friend-at" aria-hidden="true">@</span>
+                    <input type="text" id="add-friend-input" maxlength="21" placeholder="their_username" autocomplete="off" spellcheck="false">
+                    <button type="submit" class="btn-action btn-compact" data-sfx="none">Send request</button>
+                </div>
+                <p id="add-friend-msg" class="form-msg hidden" role="alert"></p>
+                <p class="my-username">Your username: <strong id="my-username"></strong>
+                    <button type="button" id="btn-copy-username" class="link-btn">Copy</button></p>
+            </form>
+
+            <div class="shop-tabs" role="tablist">
+                <button type="button" class="shop-tab friends-tab shop-tab-active" data-tab="friends" role="tab" aria-selected="true">Friends</button>
+                <button type="button" class="shop-tab friends-tab" data-tab="requests" role="tab" aria-selected="false">Requests <span id="requests-count" class="tab-count hidden">0</span></button>
+                <button type="button" class="shop-tab friends-tab" data-tab="ranking" role="tab" aria-selected="false">Weekly ranking</button>
+            </div>
+
+            <div id="friends-list" class="friends-list"><!-- injected by friends.js --></div>
+        </div>
+    </div>
+
+    <!-- ============ UPLOAD NOTICE (blocking, shown once after sign-in) ============ -->
+    <div id="upload-notice-modal" class="modal-hidden" role="dialog" aria-modal="true" aria-labelledby="upload-notice-title">
+        <div class="modal-content upload-notice">
+            <span class="modal-eyebrow">Before you start</span>
+            <h3 id="upload-notice-title">Please don't share personal information</h3>
+
+            <ul class="upload-notice-list">
+                <li>The text of the PDF you choose, and the sentences you listen to, are sent to external AI services
+                    (Google Gemini, possibly through OpenRouter) to build your expedition and read it aloud.</li>
+                <li>We have no control over how these companies store or use that text. This may include using it to train their AI models.</li>
+                <li>Your account, progress and the expedition in progress are saved on our servers. We do not keep the PDF file itself.</li>
+            </ul>
+
+            <p class="upload-notice-label">Please do not upload documents that contain:</p>
+            <p class="upload-notice-dim">names, emails, phone numbers, addresses, ID or student numbers, passwords, health information
+                or details about other people &mdash; or unpublished work you are not allowed to share.</p>
+
+            <button type="button" id="btn-upload-notice-ok" class="btn-primary" data-sfx="none">I understand</button>
+            <button type="button" class="link-btn link-inline upload-notice-link" data-open-privacy>Read the full privacy notice</button>
+        </div>
+    </div>
+
+    <!-- ============ PRIVACY NOTICE MODAL ============ -->
+    <div id="privacy-modal" class="modal-hidden" role="dialog" aria-modal="true" aria-labelledby="privacy-title">
+        <div class="shop-content account-content">
+            <header class="shop-header">
+                <div>
+                    <span class="modal-eyebrow">Your data</span>
+                    <h3 id="privacy-title" class="shop-title">Privacy notice</h3>
+                </div>
+                <button id="btn-privacy-close" class="shop-close" aria-label="Close privacy notice">&#10005;</button>
+            </header>
+            <div class="account-body privacy-text">
+                <p class="privacy-version">Version <span id="privacy-version"></span> &middot; Deep Dive Navigator is a beta
+                    prototype built for academic research and study support.</p>
+
+                <h4>What we store</h4>
+                <ul>
+                    <li>Your email, username, explorer name and avatar.</li>
+                    <li>Your game progress: XP, shards, shop items, sound preferences and weekly XP.</li>
+                    <li>Your friend requests and friendships (only usernames are visible to other explorers &mdash; never your email).</li>
+                    <li>The expedition in progress: the sections, hints and quiz questions generated from your PDF.
+                        <strong>We do not keep the PDF file itself.</strong></li>
+                    <li>When you accepted this notice, and which version.</li>
+                </ul>
+
+                <h4>Who else handles your data</h4>
+                <ul>
+                    <li><strong>AI service (Google Gemini, possibly through OpenRouter):</strong> the text of the PDF you choose is sent to it to build your expedition,
+                        and the sentences you listen to are sent to Google's text-to-speech. Each provider applies its own privacy policy.
+                        <strong>Please do not upload documents with personal, confidential or sensitive information.</strong></li>
+                    <li><strong>Supabase:</strong> hosts accounts and the database.</li>
+                    <li><strong>Netlify:</strong> hosts the website. <strong>Google Fonts</strong> serves the typefaces.</li>
+                </ul>
+
+                <h4>What we use it for</h4>
+                <p>Only to run the app: sign you in, save your progress, build your expeditions, and power friends and rankings.
+                    We do not sell your data and we show no ads.</p>
+
+                <h4>How long we keep it</h4>
+                <p>For as long as your account exists. When you delete your account, your profile, progress, expedition and friendships are permanently erased.</p>
+
+                <h4>Your rights (LGPD)</h4>
+                <p>You can, at any time and from the &#9881; Account panel: download a copy of your data, and delete your account.
+                    You can also withdraw your consent by deleting your account. To correct your data, ask us<span id="privacy-contact-wrap"></span>.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ ACCOUNT MODAL ============ -->
+    <div id="account-modal" class="modal-hidden" role="dialog" aria-modal="true" aria-labelledby="account-title">
+        <div class="shop-content account-content">
+            <header class="shop-header">
+                <div>
+                    <span class="modal-eyebrow">Explorer's papers</span>
+                    <h3 id="account-title" class="shop-title">Account &amp; privacy</h3>
+                </div>
+                <button id="btn-account-close" class="shop-close" aria-label="Close account panel">&#10005;</button>
+            </header>
+            <div class="account-body">
+                <p class="account-line">Signed in as <strong id="account-email"></strong> (@<span id="account-username"></span>)</p>
+
+                <section class="account-section">
+                    <h4>Privacy</h4>
+                    <p class="account-help">See what we store and who handles it.</p>
+                    <button type="button" class="btn-ghost btn-compact account-btn" data-open-privacy>Read the privacy notice</button>
+                </section>
+
+                <section class="account-section">
+                    <h4>Download my data</h4>
+                    <p class="account-help">Get a JSON file with your profile, progress and the expedition in progress.</p>
+                    <button type="button" id="btn-export-data" class="btn-secondary btn-compact account-btn">Download my data</button>
+                </section>
+
+                <section class="account-section account-danger">
+                    <h4>Delete my account</h4>
+                    <p class="account-help">This permanently erases your profile, XP, shards, items, expedition and friendships.
+                        <strong>It cannot be undone.</strong></p>
+                    <label class="field">
+                        <span class="field-label">Type your username to confirm</span>
+                        <input type="text" id="delete-confirm-input" autocomplete="off" spellcheck="false">
+                    </label>
+                    <p id="account-msg" class="form-msg hidden" role="alert"></p>
+                    <button type="button" id="btn-delete-account" class="btn-danger btn-compact account-btn" disabled>Delete my account forever</button>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ TOAST (level up, rewards) ============ -->
+    <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+    <script src="audio.js"></script>
+    <script src="questmap.js"></script>
+    <script src="shop.js"></script>
+    <script src="cloud.js"></script>
+    <script src="friends.js"></script>
+    <script src="voice.js"></script>
+    <script src="account.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
