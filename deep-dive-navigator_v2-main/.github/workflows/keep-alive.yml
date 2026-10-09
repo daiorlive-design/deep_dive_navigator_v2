@@ -1,1 +1,28 @@
+# Ping diário no Supabase para o projeto gratuito não ser pausado por inatividade.
+name: Keep Supabase alive
 
+on:
+  schedule:
+    - cron: '17 9 * * *' # todo dia, 09:17 UTC
+  workflow_dispatch: # permite rodar na mão pela aba Actions
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Auth e banco
+        env:
+          SUPABASE_URL: https://ddbfrfdimjavirejcfhq.supabase.co
+          # Chave pública (a mesma de cloud.js); não é segredo
+          SUPABASE_KEY: sb_publishable_8EAJ5dGG1MSnWqpPsyivtg_7Gob9Of-
+        run: |
+          curl --fail --silent --show-error --retry 3 --retry-delay 10 \
+            -H "apikey: $SUPABASE_KEY" "$SUPABASE_URL/auth/v1/health"
+          echo
+          # Login com conta falsa: consulta de verdade a tabela de usuários no banco.
+          # O erro 400 ("invalid credentials") é esperado, então não usamos --fail.
+          curl --silent --show-error --retry 3 --retry-delay 10 \
+            -X POST -H "apikey: $SUPABASE_KEY" -H "Content-Type: application/json" \
+            -d '{"email":"keepalive@example.com","password":"nao-existe-123"}' \
+            "$SUPABASE_URL/auth/v1/token?grant_type=password"
+          echo
